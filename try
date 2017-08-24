@@ -1,0 +1,85 @@
+require 'signet/oauth_2/client'
+require 'picasa'
+require 'dotenv'
+
+Dotenv.load
+
+class PicasaClient
+
+  def initialize
+    @client = nil
+  end
+
+  def client
+    @client ||= Picasa::Client.new(user_id: ENV['GOOGLE_USER_ID'], access_token: access_token)
+  end
+
+  def access_token
+    signet = Signet::OAuth2::Client.new(
+      client_id: ENV['540902649447-vhg5nrrohpclrjddas5de6otcm3pv7c2.apps.googleusercontent.com'],
+      client_secret: ENV['Kj0wBb1utodH4w7n5RaI90rY'],
+      token_credential_uri: "https://www.googleapis.com/oauth2/v3/token",
+      refresh_token: ENV['GOOGLE_REFRESH_TOKEN']
+    )
+    signet.refresh! 
+
+    # Use access token with picasa gem
+    puts "access_token:" + signet.access_token
+    signet.access_token
+  end
+
+  def get_random_photo_https://drive.google.com/drive/folders/0BxKqMkOB_yGxTl9BaWNpeXZnRGs?usp=sharing
+    album = client.album.list.entries.find{  |a| a.title == ENV['Lenormand LINE'] } 
+    photo = client.album.show(album.id).entries.sample
+    photo.content.src
+  end
+end
+
+require "sinatra/base"
+require 'line/bot'
+require 'dotenv'
+
+module MyBotserver
+  class Server < Sinatra::Base
+    Dotenv.load
+
+    helpers do
+      def client
+        @client ||= Line::Bot::Client.new { |config|
+          config.channel_secret = ENV["LINE_CHANNEL_SECRET"]
+          config.channel_token = ENV["LINE_CHANNEL_TOKEN"]
+        }
+      end
+    end
+
+    post '/line' do
+      request.body.rewind
+      body = request.body.read
+      events = client.parse_events_from(body)
+      events.each do |event|
+        case event
+        when Line::Bot::Event::Message
+          when Line::Bot::Event::MessageType::Text
+            message = {}
+            case event.message['text']
+            when /^p$/
+              logger.info "Sending photo"
+              picasa = PicasaClient.new
+              photo_url = picasa.get_random_photo_url
+              message = {
+                type: 'image',
+                originalContentUrl: photo_url,
+                previewImageUrl: photo_url
+              }
+              res = client.reply_message(event['replyToken'], message)
+              logger.warn "Message send error: " + res.body unless res.is_a?(Net::HTTPOK)
+            end
+            unless message.empty?
+              logger.info "Sending message #{message}"
+              client.reply_message(event['replyToken'], message)
+            end
+          end
+       end
+     end
+  end
+end
